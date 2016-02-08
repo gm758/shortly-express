@@ -33,6 +33,41 @@ function(req, res) {
   res.render('index');
 });
 
+app.get('/login', 
+function(req, res) {
+  res.render('login');
+});
+
+app.get('/signup', 
+function(req, res) {
+  res.render('signup');
+});
+
+app.post('/login',
+function(req, res) {
+  //hash password
+  //checck for username and hashed password in users table of database
+  //if correct
+    //create session
+    //redirect to intended page
+  // if not correct
+    //send 401 statuscode
+    //display error/try again message on page
+});
+
+
+app.post('/signup', 
+function(req, res) {
+  //check if username is already in database
+    //if so 
+      //display error 'username already taken'
+    // else
+      //hash password
+      //store username + password in database
+      //create session for user
+});
+
+
 app.get('/links', 
 function(req, res) {
   Links.reset().fetch().then(function(links) {
