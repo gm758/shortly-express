@@ -11,6 +11,7 @@ db.knex.schema.hasTable('urls').then(function(exists) {
   if (!exists) {
     db.knex.schema.createTable('urls', function (link) {
       link.increments('id').primary();
+      link.integer('userId').references('users.id');
       link.string('url', 255);
       link.string('baseUrl', 255);
       link.string('code', 100);
@@ -45,18 +46,6 @@ db.knex.schema.hasTable('users').then(function(exists) {
       user.increments('id').primary();
       user.string('username', 255);
       user.string('passwordHash', 255);
-      click.timestamps();
-    }).then(function (table) {
-      console.log('Created Table', table);
-    });
-  }
-});
-
-db.knex.schema.hasTable('users_urls').then(function(exists) {
-  if (!exists) {
-    db.knex.schema.createTable('users_urls', function (userUrl) {
-      userUrl.integer('userId'); //TODO: mark as foreign key
-      userUrl.integer('urlId'); //TODO: mark as foreign key
       click.timestamps();
     }).then(function (table) {
       console.log('Created Table', table);
