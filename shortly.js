@@ -101,18 +101,23 @@ function(req, res) {
 app.post('/signup', 
 function(req, res) {
   //check if username is already in database
-  if(false){
-  //if so 
-    //display error 'username already taken'
-  } else{
-    var user = new User({username: req.body.username, password : req.body.password});
-    user.save()
-    .then(function(){ //TODO: DRY relative to /login
-      req.session.username = req.body.username;
-      req.session.userId = user.get('id');
-      res.redirect('/');
+
+  new User({username: req.body.username})
+    .fetch()
+    .then(function(result) {
+      if (!result) {
+        var user = new User({username: req.body.username, password : req.body.password});
+        user.save()
+        .then(function(){ //TODO: DRY relative to /login
+          req.session.username = req.body.username;
+          req.session.userId = user.get('id');
+          res.redirect('/');
+        });
+      } else { //TODO: handle case where username already exists
+        console.log('Username already exists');
+        res.redirect('/signup');
+      }
     });
-  }
 });
 
 
