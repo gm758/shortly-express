@@ -3,6 +3,8 @@ var utils = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var passport = require('passport');
+var GitHubStrategy = require('passport-github2').Strategy;
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -10,10 +12,64 @@ var User = require('./app/models/user');
 var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
 var Click = require('./app/models/click');
+var config = require('./config');
+
+
+
+
+passport.serializeUser(function(user, done) {
+  console.log('serialization begun');
+  console.log(user);
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(userId, done) {
+  console.log('deserialization begun');
+  console.log(userId);
+  new User({id:userId})
+  .fetch()
+  .then(function(profile){
+    console.log('profile', profile);
+    if(profile){
+      done(null, profile.attributes);
+    }else{
+      // TODO: find out what goes here
+    }
+  });
+});
+
+
+
+
+passport.use(new GitHubStrategy({
+  clientID: config.GITHUB_CLIENT_ID,
+  clientSecret: config.GITHUB_CLIENT_SECRET,
+  callbackURL: "http://127.0.0.1:3000/auth/github/callback"
+},
+  function(accessToken, refreshToken, profile, done) {
+    // asynchronous verification, for effect...
+    process.nextTick(function () {
+      new User({githubId: profile.id}).fetch().then(function(user) {
+        if(!user) {
+          var newUser = new User({githubId: profile.id});
+          newUser.save()
+          .then(function(){ //TODO: DRY relative to /login
+            return done(null, newUser.attributes);
+          });
+        } else {
+          return done(null, user.attributes);
+        }
+      });
+    });
+  }
+));
+
 
 var app = express();
 
 app.use(session({secret:'asdfqwertty'}));
+app.use(passport.initialize());
+app.use(passport.session());
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 app.use(partials());
@@ -24,147 +80,84 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
 
-var isAuthenticated = function(req, res, callback) {
-  if (req.session.username) {
-    callback();
+var ensureAuthenticated = function(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
   } else {
-    res.redirect('/login');
+    res.redirect('/auth/github');
   }
 };
 
 
-app.get('/', 
+
+app.get('/', ensureAuthenticated,
 function(req, res) {
-  isAuthenticated(req, res, function() {
-    res.render('index');
-  });
+  res.render('index');
 });
 
-app.get('/create', 
+app.get('/create', ensureAuthenticated,
 function(req, res) {
-  isAuthenticated(req, res, function() {
-    res.render('index');
-  });
+  res.render('index');
 });
 
-app.get('/login', 
-function(req, res) {
-  res.render('login');
-});
-
-app.get('/signup', 
-function(req, res) {
-  res.render('signup');
-});
 
 app.get('/logout',
 function(req, res) {
-  req.session.destroy();
-  res.redirect('/login');
+  req.logout();
+  res.redirect('/auth/github');
 });
 
-app.post('/login',
-function(req, res) {
-  var username = req.body.username;
-  var password = req.body.password;
-  new User({username:username})
-  .fetch()
-  .then(function(user){
-    utils.verifyPassword(password, user.get('password'), function(err, verified) {
-      if (err) {
-        throw err;
-      }
 
-      if(!verified){
-        res.redirect('/login');
-      }else{
-        req.session.username = username;
-        req.session.userId = user.get('id');
-        res.redirect('/');
-      }
-    });
-  })
-  .catch(function(err){
-    console.log("No user found");
-    res.redirect('/login');
+app.get('/auth/github',
+  passport.authenticate('github', {scope: ['user:email']}), 
+  function(req, res){
+    //handled on github.com
+    console.log('test');
   });
-  //check for username and hashed password in users table of database
-  //if correct
-    //create session
-    //redirect to intended page
-  // if not correct
-    //send 401 statuscode
-    //display error/try again message on page
+
+app.get('/auth/github/callback', 
+  passport.authenticate('github', {failureRedirect: '/login'}),
+  function(req, res){
+    res.redirect('/');
+  });
+
+app.get('/links', ensureAuthenticated, 
+function(req, res) {
+  Links.query('where', 'userId', '=', req.user.id).fetch().then(function(links) {
+    res.send(200, links.models);
+  });
 });
 
-
-app.post('/signup', 
+app.post('/links', ensureAuthenticated,
 function(req, res) {
-  //check if username is already in database
+  var uri = req.body.url;
 
-  new User({username: req.body.username})
-    .fetch()
-    .then(function(result) {
-      if (!result) {
-        var user = new User({username: req.body.username, password : req.body.password});
-        user.save()
-        .then(function(){ //TODO: DRY relative to /login
-          req.session.username = req.body.username;
-          req.session.userId = user.get('id');
-          res.redirect('/');
+  if (!utils.isValidUrl(uri)) {
+    console.log('Not a valid url: ', uri);
+    return res.send(404);
+  }
+  new Link({ url: uri, userId: req.user.id }).fetch().then(function(found) {
+
+    if (found) {
+      res.send(200, found.attributes);
+    } else {
+      utils.getUrlTitle(uri, function(err, title) {
+        if (err) {
+          console.log('Error reading URL heading: ', err);
+          return res.send(404);
+        }
+
+        Links.create({
+          url: uri,
+          userId: req.user.id,
+          title: title,
+          baseUrl: req.headers.origin
+        })
+        .then(function(newLink) {
+          res.send(200, newLink);
         });
-      } else { //TODO: handle case where username already exists
-        console.log('Username already exists');
-        res.redirect('/signup');
-      }
-    });
-});
-
-
-app.get('/links', 
-function(req, res) {
-  isAuthenticated(req, res, function() {
-    var username = req.session.username;
-    var userId = req.session.userId;
-    Links.query('where', 'userId', '=', userId).fetch().then(function(links) {
-      res.send(200, links.models);
-    });
-  });
-});
-
-app.post('/links', 
-function(req, res) {
-
-  isAuthenticated(req, res, function() {
-    var uri = req.body.url;
-
-    if (!utils.isValidUrl(uri)) {
-      console.log('Not a valid url: ', uri);
-      return res.send(404);
+      });
     }
-
-    new Link({ url: uri, userId: req.session.userId }).fetch().then(function(found) {
-      if (found) {
-        res.send(200, found.attributes);
-      } else {
-        utils.getUrlTitle(uri, function(err, title) {
-          if (err) {
-            console.log('Error reading URL heading: ', err);
-            return res.send(404);
-          }
-
-          Links.create({
-            url: uri,
-            userId: req.session.userId,
-            title: title,
-            baseUrl: req.headers.origin
-          })
-          .then(function(newLink) {
-            res.send(200, newLink);
-          });
-        });
-      }
-    });
   });
 });
 
@@ -199,5 +192,5 @@ app.get('/*', function(req, res) {
   });
 });
 
-console.log('Shortly is listening on 4568');
-app.listen(4568);
+console.log('Shortly is listening on 3000');
+app.listen(3000);
