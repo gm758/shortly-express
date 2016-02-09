@@ -121,7 +121,7 @@ function(req, res) {
   isAuthenticated(req, res, function() {
     var username = req.session.username;
     var userId = req.session.userId;
-    Links.reset().where('userId', '=', userId).fetch().then(function(links) {
+    Links.query('where', 'userId', '=', userId).fetch().then(function(links) {
       res.send(200, links.models);
     });
   });
