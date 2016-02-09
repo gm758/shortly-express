@@ -24,18 +24,27 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
 
+var isAuthenticated = function(req, res, callback) {
+  if (req.session.username) {
+    callback();
+  } else {
+    res.redirect('/login');
+  }
+};
+
+
 app.get('/', 
 function(req, res) {
-  if(req.session.username){
+  isAuthenticated(req, res, function() {
     res.render('index');
-  }else{
-    res.redirect('/signup');
-  }
+  });
 });
 
 app.get('/create', 
 function(req, res) {
-  res.render('index');
+  isAuthenticated(req, res, function() {
+    res.render('index');
+  });
 });
 
 app.get('/login', 
@@ -48,6 +57,12 @@ function(req, res) {
   res.render('signup');
 });
 
+app.get('/logout',
+function(req, res) {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
 app.post('/login',
 function(req, res) {
   var username = req.body.username;
@@ -55,8 +70,6 @@ function(req, res) {
   new User({username:username})
   .fetch()
   .then(function(user){
-    console.log(user.get('password'));
-    console.log(password);
     utils.verifyPassword(password, user.get('password'), function(err, verified) {
       if (err) {
         throw err;
@@ -69,6 +82,10 @@ function(req, res) {
         res.redirect('/');
       }
     });
+  })
+  .catch(function(err){
+    console.log("No user found");
+    res.redirect('/login');
   });
   //check for username and hashed password in users table of database
   //if correct
@@ -100,40 +117,45 @@ function(req, res) {
 
 app.get('/links', 
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.send(200, links.models);
+  isAuthenticated(req, res, function() {
+    Links.reset().fetch().then(function(links) {
+      res.send(200, links.models);
+    });
   });
 });
 
 app.post('/links', 
 function(req, res) {
-  var uri = req.body.url;
 
-  if (!util.isValidUrl(uri)) {
-    console.log('Not a valid url: ', uri);
-    return res.send(404);
-  }
+  isAuthenticated(req, res, function() {
+    var uri = req.body.url;
 
-  new Link({ url: uri }).fetch().then(function(found) {
-    if (found) {
-      res.send(200, found.attributes);
-    } else {
-      util.getUrlTitle(uri, function(err, title) {
-        if (err) {
-          console.log('Error reading URL heading: ', err);
-          return res.send(404);
-        }
-
-        Links.create({
-          url: uri,
-          title: title,
-          baseUrl: req.headers.origin
-        })
-        .then(function(newLink) {
-          res.send(200, newLink);
-        });
-      });
+    if (!utils.isValidUrl(uri)) {
+      console.log('Not a valid url: ', uri);
+      return res.send(404);
     }
+
+    new Link({ url: uri }).fetch().then(function(found) {
+      if (found) {
+        res.send(200, found.attributes);
+      } else {
+        utils.getUrlTitle(uri, function(err, title) {
+          if (err) {
+            console.log('Error reading URL heading: ', err);
+            return res.send(404);
+          }
+
+          Links.create({
+            url: uri,
+            title: title,
+            baseUrl: req.headers.origin
+          })
+          .then(function(newLink) {
+            res.send(200, newLink);
+          });
+        });
+      }
+    });
   });
 });
 
