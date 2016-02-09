@@ -2,14 +2,13 @@ var db = require('../config');
 var Promise = require('bluebird');
 var utils = require('../../lib/utility');
 
-var crypto = require('crypto');
 var Link = require('./link');
 
 var User = db.Model.extend({
   tableName: 'users',
   hasTimestamps: true,
   links: function() {
-    return this.hasMany(Link);
+    return this.hasMany('Link');
   },
   initialize: function() {
     this.on('creating', function(model, attrs, options) {
@@ -32,4 +31,4 @@ var User = db.Model.extend({
   }
 });
 
-module.exports = User;
+module.exports = db.model('User', User);

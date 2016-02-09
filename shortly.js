@@ -79,6 +79,7 @@ function(req, res) {
         res.redirect('/login');
       }else{
         req.session.username = username;
+        req.session.userId = user.get('id');
         res.redirect('/');
       }
     });
@@ -100,25 +101,27 @@ function(req, res) {
 app.post('/signup', 
 function(req, res) {
   //check if username is already in database
-    if(false){
-
-    //if so 
-      //display error 'username already taken'
-    } else{
-      var user = new User({username: req.body.username, password : req.body.password});
-      user.save()
-      .then(function(){
-        req.session.username = req.body.username;
-        res.redirect('/');
-      });
-    }
+  if(false){
+  //if so 
+    //display error 'username already taken'
+  } else{
+    var user = new User({username: req.body.username, password : req.body.password});
+    user.save()
+    .then(function(){ //TODO: DRY relative to /login
+      req.session.username = req.body.username;
+      req.session.userId = user.get('id');
+      res.redirect('/');
+    });
+  }
 });
 
 
 app.get('/links', 
 function(req, res) {
   isAuthenticated(req, res, function() {
-    Links.reset().fetch().then(function(links) {
+    var username = req.session.username;
+    var userId = req.session.userId;
+    Links.reset().where('userId', '=', userId).fetch().then(function(links) {
       res.send(200, links.models);
     });
   });
@@ -147,6 +150,7 @@ function(req, res) {
 
           Links.create({
             url: uri,
+            userId: req.session.userId,
             title: title,
             baseUrl: req.headers.origin
           })
