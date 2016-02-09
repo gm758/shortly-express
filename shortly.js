@@ -1,8 +1,8 @@
 var express = require('express');
-var util = require('./lib/utility');
+var utils = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-
+var session = require('express-session');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -13,6 +13,7 @@ var Click = require('./app/models/click');
 
 var app = express();
 
+app.use(session({secret:'asdfqwertty'}));
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 app.use(partials());
@@ -25,7 +26,11 @@ app.use(express.static(__dirname + '/public'));
 
 app.get('/', 
 function(req, res) {
-  res.render('index');
+  if(req.session.username){
+    res.render('index');
+  }else{
+    res.redirect('/signup');
+  }
 });
 
 app.get('/create', 
@@ -45,8 +50,27 @@ function(req, res) {
 
 app.post('/login',
 function(req, res) {
-  //hash password
-  //checck for username and hashed password in users table of database
+  var username = req.body.username;
+  var password = req.body.password;
+  new User({username:username})
+  .fetch()
+  .then(function(user){
+    console.log(user.get('password'));
+    console.log(password);
+    utils.verifyPassword(password, user.get('password'), function(err, verified) {
+      if (err) {
+        throw err;
+      }
+
+      if(!verified){
+        res.redirect('/login');
+      }else{
+        req.session.username = username;
+        res.redirect('/');
+      }
+    });
+  });
+  //check for username and hashed password in users table of database
   //if correct
     //create session
     //redirect to intended page
@@ -59,12 +83,18 @@ function(req, res) {
 app.post('/signup', 
 function(req, res) {
   //check if username is already in database
+    if(false){
+
     //if so 
       //display error 'username already taken'
-    // else
-      //hash password
-      //store username + password in database
-      //create session for user
+    } else{
+      var user = new User({username: req.body.username, password : req.body.password});
+      user.save()
+      .then(function(){
+        req.session.username = req.body.username;
+        res.redirect('/');
+      });
+    }
 });
 
 
