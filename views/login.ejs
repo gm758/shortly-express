@@ -1,8 +1,14 @@
 <h2>Login</h2>
 <form action="/login" method="post">
     <div>
-      <label for="username">Username:</label>
-      <input id="username" type="text" name="username">
+      <ul>
+        <li><a href="/auth/github">Login with Github</a></li>
+        <li><a href="/auth/facebook">Login with Facebook</a></li>
+      </ul>
+    </div>
+    <div>
+      <label for="email">Email Address:</label>
+      <input id="email" type="text" name="email">
     </div>
     <div>
       <label for="password">Password:</label>

@@ -4,6 +4,7 @@ var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
 var passport = require('passport');
+var LocalStrategy = require('passport-local').Strategy;
 var GitHubStrategy = require('passport-github2').Strategy;
 
 var db = require('./app/config');
@@ -38,9 +39,47 @@ passport.deserializeUser(function(userId, done) {
   });
 });
 
+//implement local strategy
+passport.use('local-login', new LocalStrategy({
+  usernameField : 'email',
+  passwordField : 'password',
+  passReqToCallback : true
+}, function(req, email, password, done){
+  new User({email : email}).fetch().then(function(user){
+    if (!user) {
+      return done(null, false, { message: 'Incorrect username.' });
+    }
+    utils.verifyPassword(password, user.get("password"), function(err, verified){
+      if(!verified){
+        return done(null, false, { message: 'Incorrect password.' });
+      }else{
+        return done(null, user.attributes);
+      }
+    });
+  });
+})
+);
+
+passport.use('local-signup', new LocalStrategy({
+
+  usernnameField : 'email',
+  passwordField : 'password',
+  passReqToCallback : true
+}, function(req, email, password, done){
+  new User({email : email}).fetch().then(function(user){
+    if(!user){
+      var newUser = new User({email: email, password : password});
+      newUser.save()
+      .then(function(newUser){
+        return done(null, newUser.attributes);
+      });
+    }
+  });
+})
+);
 
 
-
+//implement github strategy
 passport.use(new GitHubStrategy({
   clientID: config.GITHUB_CLIENT_ID,
   clientSecret: config.GITHUB_CLIENT_SECRET,
@@ -49,9 +88,11 @@ passport.use(new GitHubStrategy({
   function(accessToken, refreshToken, profile, done) {
     // asynchronous verification, for effect...
     process.nextTick(function () {
-      new User({githubId: profile.id}).fetch().then(function(user) {
+      console.log(profile);
+      var email = profile.emails[0].value;
+      new User({email: email}).fetch().then(function(user) {
         if(!user) {
-          var newUser = new User({githubId: profile.id});
+          var newUser = new User({email: email});
           newUser.save()
           .then(function(){ //TODO: DRY relative to /login
             return done(null, newUser.attributes);
@@ -63,7 +104,6 @@ passport.use(new GitHubStrategy({
     });
   }
 ));
-
 
 var app = express();
 
@@ -84,7 +124,7 @@ var ensureAuthenticated = function(req, res, next) {
   if (req.isAuthenticated()) {
     return next();
   } else {
-    res.redirect('/auth/github');
+    res.redirect('/login');
   }
 };
 
@@ -100,19 +140,37 @@ function(req, res) {
   res.render('index');
 });
 
+app.get('/signup', 
+function(req, res) {
+  res.render('signup');
+});
+
+app.get('/login',
+function(req, res) {
+  res.render('login');
+});
 
 app.get('/logout',
 function(req, res) {
   req.logout();
-  res.redirect('/auth/github');
+  res.redirect('/login');
 });
+
+app.post('/signup', passport.authenticate('local-signup', {
+  successRedirect: '/',
+  failureRedirect: '/signup'
+}));
+
+app.post('/login', passport.authenticate('local-login', {
+  successRedirect: '/',
+  failureRedirect: '/login'
+}));
 
 
 app.get('/auth/github',
   passport.authenticate('github', {scope: ['user:email']}), 
   function(req, res){
     //handled on github.com
-    console.log('test');
   });
 
 app.get('/auth/github/callback', 
